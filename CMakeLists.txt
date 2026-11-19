@@ -230,6 +230,8 @@ if(WIN32)
 	list(APPEND CORE_VFS_SRC ${CMAKE_CURRENT_SOURCE_DIR}/src/util/vfs/vfs-fd.c)
 	list(APPEND VFS_SRC ${CMAKE_CURRENT_SOURCE_DIR}/src/platform/windows/vfs-w32.c)
 	file(GLOB OS_SRC ${CMAKE_CURRENT_SOURCE_DIR}/src/platform/windows/*.c)
+	# mgba-wide: vfs-w32.c needs ENABLE_DIRECTORIES and is already in VFS_SRC; keep it out of the libretro core
+	list(REMOVE_ITEM OS_SRC ${CMAKE_CURRENT_SOURCE_DIR}/src/platform/windows/vfs-w32.c)
 	source_group("Windows-specific code" FILES ${OS_SRC})
 elseif(UNIX)
 	set(USE_PTHREADS ON)
