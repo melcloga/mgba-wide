@@ -18,6 +18,8 @@ CXX_GUARD_START
 enum {
 	GBA_VIDEO_HORIZONTAL_PIXELS = 240,
 	GBA_VIDEO_VERTICAL_PIXELS = 160,
+	/* mgba-wide: largest supported widescreen render width (must be a multiple of 4) */
+	GBA_VIDEO_WIDE_MAX_PIXELS = 384,
 };
 
 enum GBASIOMode {

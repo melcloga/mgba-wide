@@ -21,6 +21,7 @@ struct GBAVideoRendererSprite {
 };
 
 int GBAVideoRendererCleanOAM(struct GBAObj* oam, struct GBAVideoRendererSprite* sprites, int offsetY);
+int GBAVideoRendererCleanOAMWide(struct GBAObj* oam, struct GBAVideoRendererSprite* sprites, int offsetY, int margin);
 
 CXX_GUARD_END
 

@@ -161,9 +161,12 @@ int GBAVideoSoftwareRendererPreprocessSprite(struct GBAVideoSoftwareRenderer* re
 	if ((flags & FLAG_OBJWIN) && (renderer->currentWindow.priority < renderer->objwin.priority || renderer->d.disableOBJWIN)) {
 		return 0;
 	}
-	int32_t x = (uint32_t) GBAObjAttributesBGetX(sprite->b) << 23;
-	x >>= 23;
-	x += renderer->objOffsetX;
+	int32_t x = GBAObjAttributesBGetX(sprite->b);
+	// mgba-wide: wrap 9-bit X relative to the widened screen, then shift into render space.
+	if (x >= GBA_VIDEO_HORIZONTAL_PIXELS + renderer->margin) {
+		x -= 512;
+	}
+	x += renderer->objOffsetX + renderer->margin;
 	uint16_t* vramBase = &renderer->d.vram[BASE_TILE >> 1];
 	unsigned align = GBAObjAttributesAIs256Color(sprite->a) && !GBARegisterDISPCNTIsObjCharacterMapping(renderer->dispcnt);
 	unsigned charBase = (GBAObjAttributesCGetTile(sprite->c) & ~align) * 0x20;

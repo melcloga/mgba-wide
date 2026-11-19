@@ -35,7 +35,7 @@
 #define SAMPLES_PER_FRAME_MOVING_AVG_ALPHA (1.0f / 180.0f)
 #define EVENT_RATE 60
 
-#define VIDEO_WIDTH_MAX  256
+#define VIDEO_WIDTH_MAX  384 /* mgba-wide: room for GBA widescreen (GBA_VIDEO_WIDE_MAX_PIXELS) */
 #define VIDEO_HEIGHT_MAX 224
 #define VIDEO_BUFF_SIZE  (VIDEO_WIDTH_MAX * VIDEO_HEIGHT_MAX * sizeof(mColor))
 
@@ -246,6 +246,27 @@ static void _updateGbPal(void) {
 }
 #endif
 
+// mgba-wide: map the core option to a margin (extra pixels per side of the 240px screen)
+static int _widescreenMargin(void) {
+	struct retro_variable var = {
+		.key = "mgba_widescreen",
+		.value = 0
+	};
+	if (!environCallback(RETRO_ENVIRONMENT_GET_VARIABLE, &var) || !var.value) {
+		return 22;
+	}
+	if (strcmp(var.value, "16:10") == 0) {
+		return 8; // 256x160
+	}
+	if (strcmp(var.value, "16:9") == 0) {
+		return 22; // 284x160
+	}
+	if (strcmp(var.value, "21:9") == 0) {
+		return 66; // 372x160
+	}
+	return 0;
+}
+
 static void _reloadSettings(void) {
 	struct mCoreOptions opts = {
 		.useBios = true,
@@ -335,6 +356,10 @@ static void _reloadSettings(void) {
 	if (environCallback(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value) {
 		mCoreConfigSetDefaultIntValue(&core->config, "gba.forceGbp", strcmp(var.value, "ON") == 0);
 	}
+
+	if (core->platform(core) == mPLATFORM_GBA) {
+		mCoreConfigSetDefaultIntValue(&core->config, "gba.widescreenMargin", _widescreenMargin());
+	}
 #endif
 
 	mCoreConfigLoadDefaults(&core->config, &opts);
@@ -422,6 +447,12 @@ void retro_get_system_av_info(struct retro_system_av_info* info) {
 	core->baseVideoSize(core, &width, &height);
 	info->geometry.max_width = width;
 	info->geometry.max_height = height;
+#ifdef M_CORE_GBA
+	if (core->platform(core) == mPLATFORM_GBA) {
+		// mgba-wide: widescreen can be toggled live, so reserve the widest frame
+		info->geometry.max_width = VIDEO_WIDTH_MAX;
+	}
+#endif
 
 	info->timing.fps = core->frequency(core) / (float) core->frameCycles(core);
 	info->timing.sample_rate = core->audioSampleRate(core);
@@ -574,6 +605,27 @@ void retro_run(void) {
 #ifdef M_CORE_GB
 		_updateGbPal();
 #endif
+
+#ifdef M_CORE_GBA
+		if (core->platform(core) == mPLATFORM_GBA) {
+			// mgba-wide: apply widescreen changes live
+			unsigned oldWidth, oldHeight, newWidth, newHeight;
+			core->currentVideoSize(core, &oldWidth, &oldHeight);
+			mCoreConfigSetIntValue(&core->config, "gba.widescreenMargin", _widescreenMargin());
+			core->reloadConfigOption(core, "gba.widescreenMargin", NULL);
+			core->currentVideoSize(core, &newWidth, &newHeight);
+			if (newWidth != oldWidth || newHeight != oldHeight) {
+				struct retro_game_geometry geometry = {
+					.base_width = newWidth,
+					.base_height = newHeight,
+					.max_width = VIDEO_WIDTH_MAX,
+					.max_height = VIDEO_HEIGHT_MAX,
+					.aspect_ratio = newWidth / (float) newHeight,
+				};
+				environCallback(RETRO_ENVIRONMENT_SET_GEOMETRY, &geometry);
+			}
+		}
+#endif
 	}
 
 	keys = 0;
@@ -615,7 +667,7 @@ void retro_run(void) {
 	core->runFrame(core);
 	unsigned width, height;
 	core->currentVideoSize(core, &width, &height);
-	videoCallback(outputBuffer, width, height, BYTES_PER_PIXEL * 256);
+	videoCallback(outputBuffer, width, height, BYTES_PER_PIXEL * VIDEO_WIDTH_MAX);
 
 #ifdef M_CORE_GBA
 	if (core->platform(core) == mPLATFORM_GBA) {

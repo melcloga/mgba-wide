@@ -80,6 +80,22 @@ struct retro_core_option_v2_category option_cats_us[] = {
 
 struct retro_core_option_v2_definition option_defs_us[] = {
    {
+      "mgba_widescreen",
+      "Widescreen (GBA)",
+      NULL,
+      "mgba-wide: renders extra pixels on both sides of the GBA screen. '16:9' draws 284x160. Games without a widescreen fix may show glitches (unloaded tiles, popping sprites) at the edges. Only affects GBA games.",
+      NULL,
+      "video",
+      {
+         { "OFF",   "Off (3:2, 240px)" },
+         { "16:10", "16:10 (256px)" },
+         { "16:9",  "16:9 (284px)" },
+         { "21:9",  "21:9 (372px)" },
+         { NULL, NULL },
+      },
+      "16:9"
+   },
+   {
       "mgba_gb_model",
       "Game Boy Model (Restart)",
       NULL,

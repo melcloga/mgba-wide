@@ -394,6 +394,12 @@ static void _GBACoreLoadConfig(struct mCore* core, const struct mCoreConfig* con
 #endif
 	mCoreConfigCopyValue(&core->config, config, "hwaccelVideo");
 	mCoreConfigCopyValue(&core->config, config, "videoScale");
+
+	// mgba-wide
+	mCoreConfigCopyValue(&core->config, config, "gba.widescreenMargin");
+	int margin = 0;
+	mCoreConfigGetIntValue(config, "gba.widescreenMargin", &margin);
+	GBAVideoSoftwareRendererSetMargin(&((struct GBACore*) core)->renderer, margin);
 }
 
 static void _GBACoreReloadConfigOption(struct mCore* core, const char* option, const struct mCoreConfig* config) {
@@ -444,6 +450,16 @@ static void _GBACoreReloadConfigOption(struct mCore* core, const char* option, c
 	}
 
 	struct GBACore* gbacore = (struct GBACore*) core;
+	if (strcmp("gba.widescreenMargin", option) == 0) {
+		// mgba-wide
+		if (config != &core->config) {
+			mCoreConfigCopyValue(&core->config, config, "gba.widescreenMargin");
+		}
+		int margin = 0;
+		mCoreConfigGetIntValue(config, "gba.widescreenMargin", &margin);
+		GBAVideoSoftwareRendererSetMargin(&gbacore->renderer, margin);
+		return;
+	}
 #ifdef BUILD_GLES3
 	if (strcmp("videoScale", option) == 0) {
 		if (config != &core->config) {
@@ -499,8 +515,8 @@ static void _GBACoreSetOverride(struct mCore* core, const void* override) {
 }
 
 static void _GBACoreBaseVideoSize(const struct mCore* core, unsigned* width, unsigned* height) {
-	UNUSED(core);
-	*width = GBA_VIDEO_HORIZONTAL_PIXELS;
+	const struct GBACore* gbacore = (const struct GBACore*) core;
+	*width = gbacore->renderer.width; // mgba-wide: 240 unless widescreen is on
 	*height = GBA_VIDEO_VERTICAL_PIXELS;
 }
 
@@ -515,7 +531,12 @@ static void _GBACoreCurrentVideoSize(const struct mCore* core, unsigned* width, 
 	UNUSED(core);
 #endif
 
-	*width = GBA_VIDEO_HORIZONTAL_PIXELS * scale;
+	if (scale == 1) {
+		// mgba-wide: the software renderer may be drawing a widened frame
+		*width = ((const struct GBACore*) core)->renderer.width;
+	} else {
+		*width = GBA_VIDEO_HORIZONTAL_PIXELS * scale;
+	}
 	*height = GBA_VIDEO_VERTICAL_PIXELS * scale;
 }
 

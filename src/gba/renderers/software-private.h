@@ -171,8 +171,10 @@ static inline void _compositeNoBlendNoObjwin(struct GBAVideoSoftwareRenderer* re
 	}
 
 #define BACKGROUND_BITMAP_INIT                                                                                        \
-	int32_t x = background->sx + (renderer->start - 1) * background->dx;                                              \
-	int32_t y = background->sy + (renderer->start - 1) * background->dy;                                              \
+	/* mgba-wide: affine/bitmap math runs in GBA screen space, offset by the widescreen margin */                     \
+	int gbaStart = renderer->start - renderer->margin;                                                                \
+	int32_t x = background->sx + (gbaStart - 1) * background->dx;                                                     \
+	int32_t y = background->sy + (gbaStart - 1) * background->dy;                                                     \
 	int mosaicH = 0;                                                                                                  \
 	int mosaicWait = 0;                                                                                               \
 	int32_t localX;                                                                                                   \
@@ -180,8 +182,8 @@ static inline void _compositeNoBlendNoObjwin(struct GBAVideoSoftwareRenderer* re
 	if (background->mosaic) {                                                                                         \
 		int mosaicV = GBAMosaicControlGetBgV(renderer->mosaic) + 1;                                                   \
 		mosaicH = GBAMosaicControlGetBgH(renderer->mosaic) + 1;                                                       \
-		mosaicWait = (mosaicH - renderer->start + GBA_VIDEO_HORIZONTAL_PIXELS * mosaicH) % mosaicH;                   \
-		int32_t startX = renderer->start - (renderer->start % mosaicH);                                               \
+		mosaicWait = (mosaicH - gbaStart + GBA_VIDEO_WIDE_MAX_PIXELS * mosaicH) % mosaicH;                            \
+		int32_t startX = gbaStart - ((gbaStart % mosaicH + mosaicH) % mosaicH);                                       \
 		--mosaicH;                                                                                                    \
 		localX = -(inY % mosaicV) * background->dmx;                                                                  \
 		localY = -(inY % mosaicV) * background->dmy;                                                                  \

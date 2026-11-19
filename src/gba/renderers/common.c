@@ -8,6 +8,10 @@
 #include <mgba/gba/interface.h>
 
 int GBAVideoRendererCleanOAM(struct GBAObj* oam, struct GBAVideoRendererSprite* sprites, int offsetY) {
+	return GBAVideoRendererCleanOAMWide(oam, sprites, offsetY, 0);
+}
+
+int GBAVideoRendererCleanOAMWide(struct GBAObj* oam, struct GBAVideoRendererSprite* sprites, int offsetY, int margin) {
 	int i;
 	int oamMax = 0;
 	for (i = 0; i < 128; ++i) {
@@ -18,8 +22,11 @@ int GBAVideoRendererCleanOAM(struct GBAObj* oam, struct GBAVideoRendererSprite* 
 		if (GBAObjAttributesAIsTransformed(obj.a) || !GBAObjAttributesAIsDisable(obj.a)) {
 			int width = GBAVideoObjSizes[GBAObjAttributesAGetShape(obj.a) * 4 + GBAObjAttributesBGetSize(obj.b)][0];
 			int height = GBAVideoObjSizes[GBAObjAttributesAGetShape(obj.a) * 4 + GBAObjAttributesBGetSize(obj.b)][1];
-			int32_t x = (uint32_t) GBAObjAttributesBGetX(obj.b) << 23;
-			x >>= 23;
+			int32_t x = GBAObjAttributesBGetX(obj.b);
+			// mgba-wide: X is 9 bits. Values past the right edge of the widened screen wrap to the left.
+			if (x >= GBA_VIDEO_HORIZONTAL_PIXELS + margin) {
+				x -= 512;
+			}
 			int cycles;
 			if (GBAObjAttributesAIsTransformed(obj.a)) {
 				height <<= GBAObjAttributesAGetDoubleSize(obj.a);
@@ -31,7 +38,7 @@ int GBAVideoRendererCleanOAM(struct GBAObj* oam, struct GBAVideoRendererSprite* 
 			} else {
 				cycles = width - 2;
 				if (x < 0) {
-					if (x + width < 0) {
+					if (x + width < -margin) {
 						continue;
 					}
 					cycles += x >> 1;
@@ -40,7 +47,7 @@ int GBAVideoRendererCleanOAM(struct GBAObj* oam, struct GBAVideoRendererSprite* 
 			if (GBAObjAttributesAGetY(obj.a) >= GBA_VIDEO_VERTICAL_PIXELS && GBAObjAttributesAGetY(obj.a) + height < VIDEO_VERTICAL_TOTAL_PIXELS) {
 				continue;
 			}
-			if (GBAObjAttributesBGetX(obj.b) >= GBA_VIDEO_HORIZONTAL_PIXELS && GBAObjAttributesBGetX(obj.b) + width < 512) {
+			if (GBAObjAttributesBGetX(obj.b) >= GBA_VIDEO_HORIZONTAL_PIXELS + margin && GBAObjAttributesBGetX(obj.b) + width < 512 - margin) {
 				continue;
 			}
 			int y = GBAObjAttributesAGetY(obj.a) + offsetY;

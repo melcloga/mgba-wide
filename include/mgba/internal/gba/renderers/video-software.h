@@ -75,7 +75,7 @@ struct WindowControl {
 #define MAX_WINDOW 5
 
 struct Window {
-	uint8_t endX;
+	uint16_t endX;
 	struct WindowControl control;
 };
 
@@ -89,8 +89,13 @@ struct GBAVideoSoftwareRenderer {
 
 	GBARegisterDISPCNT dispcnt;
 
-	uint32_t row[GBA_VIDEO_HORIZONTAL_PIXELS];
-	uint32_t spriteLayer[GBA_VIDEO_HORIZONTAL_PIXELS];
+	uint32_t row[GBA_VIDEO_WIDE_MAX_PIXELS];
+	uint32_t spriteLayer[GBA_VIDEO_WIDE_MAX_PIXELS];
+
+	// mgba-wide: extra pixels rendered on each side of the 240px screen.
+	// width == GBA_VIDEO_HORIZONTAL_PIXELS + 2 * margin
+	int margin;
+	int width;
 	int32_t spriteCyclesRemaining;
 
 	// BLDCNT
@@ -154,6 +159,8 @@ struct GBAVideoSoftwareRenderer {
 };
 
 void GBAVideoSoftwareRendererCreate(struct GBAVideoSoftwareRenderer* renderer);
+// mgba-wide: set the widescreen margin (pixels per side). Must be even and keep width <= GBA_VIDEO_WIDE_MAX_PIXELS.
+void GBAVideoSoftwareRendererSetMargin(struct GBAVideoSoftwareRenderer* renderer, int margin);
 
 CXX_GUARD_START
 
