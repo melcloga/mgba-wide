@@ -221,6 +221,7 @@ struct GBACore {
 	struct mCoreMemoryBlock memoryBlocks[12];
 	size_t nMemoryBlocks;
 	int memoryBlockType;
+	const struct GBAWideGame* wideGame; // mgba-wide: active per-game fix, if any
 };
 
 #define _MAX(A, B) ((A > B) ? (A) : (B))
@@ -354,16 +355,26 @@ static void _GBACoreSetSync(struct mCore* core, struct mCoreSync* sync) {
 	gba->sync = sync;
 }
 
-// mgba-wide: turn the loaded game's widescreen fix on or off to match the current margin
-static void _GBACoreUpdateWide(struct mCore* core) {
+// mgba-wide: turn the loaded game's widescreen fix on or off to match the current margin.
+// A fix changes how the game sets up its graphics at boot, so it's only switched at a reset;
+// changing the widescreen setting while a game runs keeps whatever the game booted with.
+static void _GBACoreUpdateWide(struct mCore* core, bool atReset) {
 	struct GBACore* gbacore = (struct GBACore*) core;
 	struct GBA* gba = core->board;
 	bool wide = gbacore->renderer.margin > 0;
-	const struct GBAWideGame* game = NULL;
-	if (gba->memory.rom) {
-		game = GBAWideApply(gba, wide);
+	const struct GBAWideGame* game = gbacore->wideGame;
+	if (atReset) {
+		game = NULL;
+		if (gba->memory.rom) {
+			game = GBAWideApply(gba, wide);
+		}
+		gbacore->wideGame = wide ? game : NULL;
+		game = gbacore->wideGame;
 	}
-	bool shadow = wide && game && game->shadowMaps;
+	wide = wide && game;
+	gbacore->renderer.wideMapMemory = (const uint16_t*) gba->memory.wram;
+	GBAVideoSoftwareRendererSetWideLinear(&gbacore->renderer, gbacore->wideGame ? gbacore->wideGame->linearMaps : 0);
+	bool shadow = wide && game->shadowMaps;
 	gba->video.wideShadowWrites = shadow;
 	if (gbacore->renderer.wideShadow != shadow) {
 		GBAVideoSoftwareRendererSetWideShadow(&gbacore->renderer, shadow);
@@ -417,7 +428,7 @@ static void _GBACoreLoadConfig(struct mCore* core, const struct mCoreConfig* con
 	int margin = 0;
 	mCoreConfigGetIntValue(config, "gba.widescreenMargin", &margin);
 	GBAVideoSoftwareRendererSetMargin(&((struct GBACore*) core)->renderer, margin);
-	_GBACoreUpdateWide(core);
+	_GBACoreUpdateWide(core, false);
 }
 
 static void _GBACoreReloadConfigOption(struct mCore* core, const char* option, const struct mCoreConfig* config) {
@@ -476,7 +487,7 @@ static void _GBACoreReloadConfigOption(struct mCore* core, const char* option, c
 		int margin = 0;
 		mCoreConfigGetIntValue(config, "gba.widescreenMargin", &margin);
 		GBAVideoSoftwareRendererSetMargin(&gbacore->renderer, margin);
-		_GBACoreUpdateWide(core);
+		_GBACoreUpdateWide(core, false);
 		return;
 	}
 #ifdef BUILD_GLES3
@@ -894,13 +905,17 @@ static void _GBACoreReset(struct mCore* core) {
 		GBASkipBIOS(core->board);
 	}
 
-	_GBACoreUpdateWide(core);
+	_GBACoreUpdateWide(core, true);
 
 	mTimingInterrupt(&gba->timing);
 }
 
 static void _GBACoreRunFrame(struct mCore* core) {
 	struct GBA* gba = core->board;
+	struct GBACore* gbacore = (struct GBACore*) core;
+	if (gbacore->wideGame && gbacore->wideGame->frame) {
+		gbacore->wideGame->frame(gba, &gbacore->renderer);
+	}
 	uint32_t frameCounter = gba->video.frameCounter;
 	uint32_t startCycle = mTimingCurrentTime(&gba->timing);
 	while (gba->video.frameCounter == frameCounter && mTimingCurrentTime(&gba->timing) - startCycle < VIDEO_TOTAL_LENGTH + VIDEO_HORIZONTAL_LENGTH) {
@@ -1682,6 +1697,7 @@ static void _GBACoreEndVideoLog(struct mCore* core) {
 
 struct mCore* GBACoreCreate(void) {
 	struct GBACore* gbacore = malloc(sizeof(*gbacore));
+	gbacore->wideGame = NULL;
 	struct mCore* core = &gbacore->d;
 	memset(&core->opts, 0, sizeof(core->opts));
 	core->cpu = NULL;

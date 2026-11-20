@@ -10,7 +10,7 @@
 #define BACKGROUND_TEXT_SELECT_CHARACTER \
 	if (wideShadowRow) { \
 		/* mgba-wide: 64-column shadow map */ \
-		mapData = wideShadowRow[(localX >> 3) & 0x3F]; \
+		mapData = wideShadowRow[(localX >> 3) & wideColMask]; \
 	} else { \
 		xBase = localX & 0xF8; \
 		if (background->size & 1) { \
@@ -499,7 +499,12 @@ void GBAVideoSoftwareRendererDrawBackgroundMode0(struct GBAVideoSoftwareRenderer
 	uint16_t mapData;
 
 	const uint16_t* wideShadowRow = NULL;
-	if (renderer->wideShadow && renderer->margin && background->size == 0) {
+	int wideColMask = 0x3F;
+	if ((renderer->wideLinearMask & (1 << background->index)) && renderer->wideMapMemory && (background->size == 1 || background->overflow)) {
+		int wideCols = background->size == 1 ? 64 : 32;
+		wideColMask = wideCols - 1;
+		wideShadowRow = &renderer->wideMapMemory[background->screenBase + ((inY >> 3) & 31) * wideCols];
+	} else if (renderer->wideShadow && renderer->margin && background->size == 0) {
 		wideShadowRow = &renderer->wideShadowMap[background->index][((inY >> 3) & 31) * 64];
 	}
 

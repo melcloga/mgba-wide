@@ -83,7 +83,7 @@ struct retro_core_option_v2_definition option_defs_us[] = {
       "mgba_widescreen",
       "Widescreen (GBA)",
       NULL,
-      "mgba-wide: renders extra pixels on both sides of the GBA screen. '16:9' draws 284x160. Games without a widescreen fix may show glitches (unloaded tiles, popping sprites) at the edges. Only affects GBA games.",
+      "mgba-wide: renders extra pixels on both sides of the GBA screen. '16:9' draws 284x160. Games without a widescreen fix may show glitches (unloaded tiles, popping sprites) at the edges. Games with a fix (e.g. Star Wars Episode III) only switch it on or off when the game is restarted. Only affects GBA games.",
       NULL,
       "video",
       {

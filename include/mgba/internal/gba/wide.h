@@ -11,6 +11,7 @@
 CXX_GUARD_START
 
 struct GBA;
+struct GBAVideoSoftwareRenderer;
 
 struct GBAWidePatch {
 	uint32_t address;  // ROM address (0x08xxxxxx)
@@ -25,6 +26,10 @@ struct GBAWideGame {
 	const struct GBAWidePatch* patches;
 	size_t nPatches;
 	bool shadowMaps;   // keep 64-column shadow copies of 256px-wide BG maps
+	// BGs (bit per BG) whose size-1 text maps the patched game lays out as linear 64x32
+	uint8_t linearMaps;
+	// optional: called once per frame while the fix is on, to sync renderer settings with game state
+	void (*frame)(struct GBA* gba, struct GBAVideoSoftwareRenderer* renderer);
 };
 
 const struct GBAWideGame* GBAWideFindGame(const struct GBA* gba);

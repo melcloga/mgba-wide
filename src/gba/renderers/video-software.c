@@ -92,6 +92,8 @@ void GBAVideoSoftwareRendererCreate(struct GBAVideoSoftwareRenderer* renderer) {
 	renderer->margin = 0;
 	renderer->width = GBA_VIDEO_HORIZONTAL_PIXELS;
 	renderer->wideShadow = false;
+	renderer->wideLinearMask = 0;
+	renderer->wideMapMemory = NULL;
 }
 
 static void _wideTrackScroll(struct GBAVideoSoftwareBackground* bg, uint16_t value) {
@@ -193,6 +195,18 @@ static void _wideShadowWrite(struct GBAVideoSoftwareRenderer* renderer, uint32_t
 		}
 		shadow[row * 64 + streamed] = value;
 	}
+}
+
+void GBAVideoSoftwareRendererSetWideLinear(struct GBAVideoSoftwareRenderer* renderer, uint8_t bgMask) {
+	if (renderer->wideLinearMask == bgMask) {
+		return;
+	}
+	renderer->wideLinearMask = bgMask;
+	int i;
+	for (i = 0; i < 4; ++i) {
+		renderer->bg[i].yCache = -1;
+	}
+	memset(renderer->scanlineDirty, 0xFFFFFFFF, sizeof(renderer->scanlineDirty));
 }
 
 void GBAVideoSoftwareRendererSetWideShadow(struct GBAVideoSoftwareRenderer* renderer, bool enable) {
