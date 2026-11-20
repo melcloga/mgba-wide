@@ -366,7 +366,7 @@ static void _GBACoreUpdateWide(struct mCore* core, bool atReset) {
 	if (atReset) {
 		game = NULL;
 		if (gba->memory.rom) {
-			game = GBAWideApply(gba, wide);
+			game = GBAWideApply(gba, wide, gbacore->renderer.margin);
 		}
 		gbacore->wideGame = wide ? game : NULL;
 		game = gbacore->wideGame;

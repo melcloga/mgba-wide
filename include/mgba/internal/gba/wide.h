@@ -17,6 +17,7 @@ struct GBAWidePatch {
 	uint32_t address;  // ROM address (0x08xxxxxx)
 	uint16_t original; // expected halfword before patching; the whole set is skipped on mismatch
 	uint16_t patched;
+	bool marginImm;    // OR the widescreen margin (pixels per side) into the patched value's low byte
 };
 
 struct GBAWideGame {
@@ -36,7 +37,7 @@ const struct GBAWideGame* GBAWideFindGame(const struct GBA* gba);
 
 // Apply (enable == true) or revert this game's widescreen fix. Returns the game entry, or NULL
 // if the loaded ROM has no fix. Safe to call repeatedly.
-const struct GBAWideGame* GBAWideApply(struct GBA* gba, bool enable);
+const struct GBAWideGame* GBAWideApply(struct GBA* gba, bool enable, int margin);
 
 CXX_GUARD_END
 

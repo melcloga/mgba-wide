@@ -270,6 +270,19 @@ static const struct GBAWidePatch _sw3Patches[] = {
 	{ 0x080A99F6, 0x381F, 0x3827 }, // moving right: sub r0, #31 -> #39
 	{ 0x080A9A0A, 0x3020, 0x3040 }, // ...and wrap negatives by 64 instead of 32
 
+	// Layer scroll clamp (0x080AA84C): keep the camera a margin away from the stage edges so the
+	// side margins show the stage instead of whatever is past its ends. Clamp to max - M, then M.
+	{ 0x080AA898, 0x2B00, 0x4641 },       // mov r1, r8
+	{ 0x080AA89A, 0xDA01, 0x8888 },       // ldrh r0, [r1, #4]  (max scroll x)
+	{ 0x080AA89C, 0x2300, 0x3800, true }, // sub r0, #M
+	{ 0x080AA89E, 0xE005, 0x4283 },       // cmp r3, r0
+	{ 0x080AA8A0, 0x4641, 0xDD00 },       // ble 0x080AA8A4
+	{ 0x080AA8A2, 0x2704, 0x1C03 },       // mov r3, r0
+	{ 0x080AA8A4, 0x5FC8, 0x2B00, true }, // cmp r3, #M
+	{ 0x080AA8A6, 0x4283, 0xDA00 },       // bge 0x080AA8AA
+	{ 0x080AA8A8, 0xDD00, 0x2300, true }, // mov r3, #M
+	{ 0x080AA8AA, 0x1C03, 0x46C0 },       // nop
+
 	// Column streaming, inline path for layers without the wrap flag (0x080AA968):
 	// right: col + 30 -> col + 34, left: col -> col - 4
 	{ 0x080AA96E, 0x2D00, 0x8808 }, // ldrh r0, [r1, #0]
@@ -388,7 +401,7 @@ static uint16_t _romRead16(const struct GBA* gba, uint32_t address) {
 	return rom[offset] | (rom[offset + 1] << 8);
 }
 
-const struct GBAWideGame* GBAWideApply(struct GBA* gba, bool enable) {
+const struct GBAWideGame* GBAWideApply(struct GBA* gba, bool enable, int margin) {
 	const struct GBAWideGame* game = GBAWideFindGame(gba);
 	if (!game) {
 		return NULL;
@@ -398,13 +411,20 @@ const struct GBAWideGame* GBAWideApply(struct GBA* gba, bool enable) {
 	// Only touch the ROM if every patch site holds either the original or the patched value
 	for (i = 0; i < game->nPatches; ++i) {
 		uint16_t value = _romRead16(gba, game->patches[i].address);
-		if (value != game->patches[i].original && value != game->patches[i].patched) {
+		uint16_t patched = game->patches[i].patched;
+		if (game->patches[i].marginImm) {
+			patched = (patched & 0xFF00) | (value & 0xFF);
+		}
+		if (value != game->patches[i].original && value != patched) {
 			mLOG(GBA_WIDE, WARN, "%s: unexpected data at 0x%08X, widescreen fix skipped", game->title, game->patches[i].address);
 			return NULL;
 		}
 	}
 	for (i = 0; i < game->nPatches; ++i) {
 		want = enable ? game->patches[i].patched : game->patches[i].original;
+		if (enable && game->patches[i].marginImm) {
+			want |= margin & 0xFF;
+		}
 		if (_romRead16(gba, game->patches[i].address) != want) {
 			int16_t old;
 			GBAPatch16(gba->cpu, game->patches[i].address, want, &old);
