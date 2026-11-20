@@ -374,6 +374,9 @@ static void _GBACoreUpdateWide(struct mCore* core, bool atReset) {
 	wide = wide && game;
 	gbacore->renderer.wideMapMemory = (const uint16_t*) gba->memory.wram;
 	GBAVideoSoftwareRendererSetWideLinear(&gbacore->renderer, gbacore->wideGame ? gbacore->wideGame->linearMaps : 0);
+	if (!gbacore->wideGame || !gbacore->wideGame->frame) {
+		GBAVideoSoftwareRendererSetWideClip(&gbacore->renderer, 0, 0);
+	}
 	bool shadow = wide && game->shadowMaps;
 	gba->video.wideShadowWrites = shadow;
 	if (gbacore->renderer.wideShadow != shadow) {

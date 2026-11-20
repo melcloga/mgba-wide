@@ -500,8 +500,8 @@ void GBAVideoSoftwareRendererDrawBackgroundMode0(struct GBAVideoSoftwareRenderer
 
 	const uint16_t* wideShadowRow = NULL;
 	int wideColMask = 0x3F;
-	if ((renderer->wideLinearMask & (1 << background->index)) && renderer->wideMapMemory && (background->size == 1 || background->overflow)) {
-		int wideCols = background->size == 1 ? 64 : 32;
+	if ((renderer->wideLinearMask & (1 << background->index)) && renderer->wideMapMemory && background->size == 1) {
+		int wideCols = 64;
 		wideColMask = wideCols - 1;
 		wideShadowRow = &renderer->wideMapMemory[background->screenBase + ((inY >> 3) & 31) * wideCols];
 	} else if (renderer->wideShadow && renderer->margin && background->size == 0) {

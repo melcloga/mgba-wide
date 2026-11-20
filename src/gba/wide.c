@@ -289,8 +289,78 @@ static const struct GBAWidePatch _sw3Patches[] = {
 	{ 0x080A9DCC, 0x4003, 0xE7F3 },
 };
 
+/* Scroll layer structs live in EWRAM at addresses that change between stages; find them by
+ * the masks our patch writes into them (+24 column mask 63, +26 row mask 31, +28 x mask 511,
+ * +30 y mask 255). Layout: +0 width (tiles), +4 max scroll x (pixels), +8 column, +12 fine x.
+ */
+#define SW3_MAX_LAYERS 4
+static uint32_t _sw3Layers[SW3_MAX_LAYERS];
+static int _sw3NLayers;
+static int _sw3RescanTimer;
+
+static uint16_t _ew16(const uint8_t* ewram, uint32_t offset) {
+	return ewram[offset] | (ewram[offset + 1] << 8);
+}
+
+static bool _sw3IsLayer(const uint8_t* ewram, uint32_t offset) {
+	if (offset + 32 > GBA_SIZE_EWRAM) {
+		return false;
+	}
+	if (_ew16(ewram, offset + 24) != 63 || _ew16(ewram, offset + 26) != 31 || _ew16(ewram, offset + 28) != 511 || _ew16(ewram, offset + 30) != 255) {
+		return false;
+	}
+	uint16_t width = _ew16(ewram, offset);
+	uint16_t maxX = _ew16(ewram, offset + 4);
+	return width >= 1 && width <= 4096 && maxX + 240 <= width * 8 + 8;
+}
+
+static void _sw3Frame(struct GBA* gba, struct GBAVideoSoftwareRenderer* renderer) {
+	const uint8_t* ewram = (const uint8_t*) gba->memory.wram;
+	int i;
+	bool valid = _sw3NLayers > 0;
+	for (i = 0; i < _sw3NLayers; ++i) {
+		if (!_sw3IsLayer(ewram, _sw3Layers[i])) {
+			valid = false;
+		}
+	}
+	if (!valid) {
+		_sw3NLayers = 0;
+		if (_sw3RescanTimer > 0) {
+			--_sw3RescanTimer;
+		} else {
+			uint32_t offset;
+			for (offset = 0; offset < GBA_SIZE_EWRAM - 32 && _sw3NLayers < SW3_MAX_LAYERS; offset += 4) {
+				if (_sw3IsLayer(ewram, offset)) {
+					_sw3Layers[_sw3NLayers++] = offset;
+				}
+			}
+			_sw3RescanTimer = 15;
+		}
+	}
+	if (!_sw3NLayers) {
+		// Menus, text screens: they're drawn for 240px, so show black side bars
+		GBAVideoSoftwareRendererSetWideClip(renderer, renderer->margin, renderer->margin);
+		return;
+	}
+	// Use the widest layer (the foreground) to find the edges of the stage
+	uint32_t best = _sw3Layers[0];
+	for (i = 1; i < _sw3NLayers; ++i) {
+		if (_ew16(ewram, _sw3Layers[i]) > _ew16(ewram, best)) {
+			best = _sw3Layers[i];
+		}
+	}
+	int x = (int16_t) _ew16(ewram, best + 8) * 8 + (int16_t) _ew16(ewram, best + 12);
+	int maxX = _ew16(ewram, best + 4);
+	if (maxX + GBA_VIDEO_HORIZONTAL_PIXELS <= 256) {
+		// A single-screen layout (menus, title cards): keep it centered between black bars
+		GBAVideoSoftwareRendererSetWideClip(renderer, renderer->margin, renderer->margin);
+		return;
+	}
+	GBAVideoSoftwareRendererSetWideClip(renderer, renderer->margin - x, renderer->margin - (maxX - x));
+}
+
 static const struct GBAWideGame _games[] = {
-	{ { 'B', 'E', '3', 'E' }, 0, "Star Wars: Episode III - Revenge of the Sith (USA)", _sw3Patches, sizeof(_sw3Patches) / sizeof(*_sw3Patches), false, 0xF, NULL },
+	{ { 'B', 'E', '3', 'E' }, 0, "Star Wars: Episode III - Revenge of the Sith (USA)", _sw3Patches, sizeof(_sw3Patches) / sizeof(*_sw3Patches), false, 0xF, _sw3Frame },
 	{ { 0, 0, 0, 0 }, 0, NULL, NULL, 0, false, 0, NULL }
 };
 

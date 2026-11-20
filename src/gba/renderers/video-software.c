@@ -94,6 +94,8 @@ void GBAVideoSoftwareRendererCreate(struct GBAVideoSoftwareRenderer* renderer) {
 	renderer->wideShadow = false;
 	renderer->wideLinearMask = 0;
 	renderer->wideMapMemory = NULL;
+	renderer->wideClipLeft = 0;
+	renderer->wideClipRight = 0;
 }
 
 static void _wideTrackScroll(struct GBAVideoSoftwareBackground* bg, uint16_t value) {
@@ -195,6 +197,27 @@ static void _wideShadowWrite(struct GBAVideoSoftwareRenderer* renderer, uint32_t
 		}
 		shadow[row * 64 + streamed] = value;
 	}
+}
+
+void GBAVideoSoftwareRendererSetWideClip(struct GBAVideoSoftwareRenderer* renderer, int left, int right) {
+	if (left < 0) {
+		left = 0;
+	}
+	if (right < 0) {
+		right = 0;
+	}
+	if (left > renderer->margin) {
+		left = renderer->margin;
+	}
+	if (right > renderer->margin) {
+		right = renderer->margin;
+	}
+	if (renderer->wideClipLeft == left && renderer->wideClipRight == right) {
+		return;
+	}
+	renderer->wideClipLeft = left;
+	renderer->wideClipRight = right;
+	memset(renderer->scanlineDirty, 0xFFFFFFFF, sizeof(renderer->scanlineDirty));
 }
 
 void GBAVideoSoftwareRendererSetWideLinear(struct GBAVideoSoftwareRenderer* renderer, uint8_t bgMask) {
@@ -893,6 +916,13 @@ static void GBAVideoSoftwareRendererDrawScanline(struct GBAVideoRenderer* render
 #else
 		memcpy(row, softwareRenderer->row, softwareRenderer->width * sizeof(*row));
 #endif
+	}
+	// mgba-wide: black out parts of the side margins the game has nothing to show in
+	for (x = 0; x < softwareRenderer->wideClipLeft; ++x) {
+		row[x] = 0;
+	}
+	for (x = softwareRenderer->width - softwareRenderer->wideClipRight; x < softwareRenderer->width; ++x) {
+		row[x] = 0;
 	}
 }
 

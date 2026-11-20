@@ -117,10 +117,12 @@ struct GBAVideoSoftwareRenderer {
 	bool wideShadow;
 	uint16_t wideShadowMap[4][64 * 32];
 	// mgba-wide: BGs (bit per BG) that a patched game keeps in EWRAM instead of VRAM, as one
-	// linear block (64x32 for size 1, 32x32 otherwise) at EWRAM offset screenBase * 2. Only
-	// text BGs whose BGCNT has bit 13 or the size-1 bit set are redirected.
+	// linear 64x32 block at EWRAM offset screenBase * 2. Only size-1 text BGs are redirected.
 	uint8_t wideLinearMask;
 	const uint16_t* wideMapMemory;
+	// mgba-wide: pixels of the left/right margin to paint black (nothing there to show)
+	int wideClipLeft;
+	int wideClipRight;
 	int32_t spriteCyclesRemaining;
 
 	// BLDCNT
@@ -188,6 +190,7 @@ void GBAVideoSoftwareRendererCreate(struct GBAVideoSoftwareRenderer* renderer);
 void GBAVideoSoftwareRendererSetMargin(struct GBAVideoSoftwareRenderer* renderer, int margin);
 void GBAVideoSoftwareRendererSetWideShadow(struct GBAVideoSoftwareRenderer* renderer, bool enable);
 void GBAVideoSoftwareRendererSetWideLinear(struct GBAVideoSoftwareRenderer* renderer, uint8_t bgMask);
+void GBAVideoSoftwareRendererSetWideClip(struct GBAVideoSoftwareRenderer* renderer, int left, int right);
 
 CXX_GUARD_START
 
