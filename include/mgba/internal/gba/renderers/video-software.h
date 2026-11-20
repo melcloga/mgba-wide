@@ -48,6 +48,19 @@ struct GBAVideoSoftwareBackground {
 	int32_t offsetX;
 	int32_t offsetY;
 	bool highlight;
+
+	// mgba-wide: horizontal scroll direction tracking for shadow maps
+	int wideDir;
+	int wideIdle;
+	// mgba-wide: the column write burst currently in progress (see _wideShadowWrite)
+	int wideBurstCol;
+	int wideBurstRow;
+	int wideBurstLen;
+	int wideBurstShift;
+	struct {
+		int row;
+		uint16_t inViewOld;
+	} wideBurstPending[3];
 };
 
 enum {
@@ -96,6 +109,13 @@ struct GBAVideoSoftwareRenderer {
 	// width == GBA_VIDEO_HORIZONTAL_PIXELS + 2 * margin
 	int margin;
 	int width;
+
+	// mgba-wide: 64-column "shadow" copies of 256px-wide text BG maps. The game (with a
+	// widescreen patch) streams extra columns into its 32-column VRAM ring; each write is
+	// filed into the shadow slot nearest the camera, so the renderer can show more than
+	// 256 distinct pixels per line.
+	bool wideShadow;
+	uint16_t wideShadowMap[4][64 * 32];
 	int32_t spriteCyclesRemaining;
 
 	// BLDCNT
@@ -161,6 +181,7 @@ struct GBAVideoSoftwareRenderer {
 void GBAVideoSoftwareRendererCreate(struct GBAVideoSoftwareRenderer* renderer);
 // mgba-wide: set the widescreen margin (pixels per side). Must be even and keep width <= GBA_VIDEO_WIDE_MAX_PIXELS.
 void GBAVideoSoftwareRendererSetMargin(struct GBAVideoSoftwareRenderer* renderer, int margin);
+void GBAVideoSoftwareRendererSetWideShadow(struct GBAVideoSoftwareRenderer* renderer, bool enable);
 
 CXX_GUARD_START
 

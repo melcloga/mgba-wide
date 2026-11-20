@@ -91,6 +91,119 @@ void GBAVideoSoftwareRendererCreate(struct GBAVideoSoftwareRenderer* renderer) {
 
 	renderer->margin = 0;
 	renderer->width = GBA_VIDEO_HORIZONTAL_PIXELS;
+	renderer->wideShadow = false;
+}
+
+static void _wideTrackScroll(struct GBAVideoSoftwareBackground* bg, uint16_t value) {
+	int delta = (value - bg->x) & 0x1FF;
+	if (!delta) {
+		return;
+	}
+	if (delta > 0x100) {
+		delta -= 0x200;
+	}
+	if (delta > 24 || delta < -24) {
+		// A jump (new area or camera cut), not a scroll
+		bg->wideDir = 0;
+	} else {
+		bg->wideDir = delta > 0 ? 1 : -1;
+	}
+	bg->wideIdle = 0;
+}
+
+static bool _wideShadowActive(const struct GBAVideoSoftwareRenderer* renderer, const struct GBAVideoSoftwareBackground* bg) {
+	return renderer->wideShadow && renderer->margin && bg->size == 0;
+}
+
+static void _wideShadowInit(struct GBAVideoSoftwareRenderer* renderer, int i) {
+	struct GBAVideoSoftwareBackground* bg = &renderer->bg[i];
+	if (!renderer->d.vram) {
+		return;
+	}
+	const uint16_t* map = &renderer->d.vram[bg->screenBase >> 1];
+	int row, col;
+	for (row = 0; row < 32; ++row) {
+		for (col = 0; col < 64; ++col) {
+			renderer->wideShadowMap[i][row * 64 + col] = map[row * 32 + (col & 31)];
+		}
+	}
+	bg->yCache = -1;
+}
+
+#define WIDE_BURST_MIN 4
+
+static void _wideShadowWrite(struct GBAVideoSoftwareRenderer* renderer, uint32_t address) {
+	int i;
+	for (i = 0; i < 4; ++i) {
+		struct GBAVideoSoftwareBackground* bg = &renderer->bg[i];
+		if (!_wideShadowActive(renderer, bg) || address < bg->screenBase || address >= bg->screenBase + 0x800) {
+			continue;
+		}
+		uint16_t value = renderer->d.vram[address >> 1];
+		uint16_t* shadow = renderer->wideShadowMap[i];
+		int entry = (address - bg->screenBase) >> 1;
+		int row = entry >> 5;
+		int slot = entry & 31;
+		int cam = ((bg->x - bg->offsetX) >> 3) & 63;
+		int off = (slot - cam) & 31;
+		int inView = (cam + off) & 63;
+
+		// Track vertical runs of writes in one column: that's how the game streams in a new
+		// column of scenery while scrolling.
+		if (slot == bg->wideBurstCol && row == ((bg->wideBurstRow + 1) & 31)) {
+			++bg->wideBurstLen;
+		} else {
+			bg->wideBurstCol = slot;
+			bg->wideBurstLen = 1;
+			bg->wideBurstShift = 0;
+		}
+		bg->wideBurstRow = row;
+
+		// A 32-column ring can't say whether a write near an edge is for the left or the right
+		// side of a widened view. While scrolling right, a column streamed in at the left end
+		// of the ring is really past the right edge; while scrolling left, one at the right end
+		// is really past the left edge. Short runs are tile updates (animations, breakables)
+		// and stay where they are.
+		int shift = 0;
+		if (bg->wideDir > 0 && off <= 6) {
+			shift = 32;
+		} else if (bg->wideDir < 0 && off >= 25) {
+			shift = -32;
+		}
+		if (!shift) {
+			shadow[row * 64 + inView] = value;
+			continue;
+		}
+		int streamed = (cam + off + shift) & 63;
+		if (bg->wideBurstLen < WIDE_BURST_MIN) {
+			// Not sure yet: write it in view, but remember what was there
+			bg->wideBurstPending[bg->wideBurstLen - 1].row = row;
+			bg->wideBurstPending[bg->wideBurstLen - 1].inViewOld = shadow[row * 64 + inView];
+			shadow[row * 64 + inView] = value;
+			continue;
+		}
+		if (bg->wideBurstLen == WIDE_BURST_MIN) {
+			// It's a streamed column: move the earlier writes over and restore what they covered
+			int p;
+			for (p = 0; p < WIDE_BURST_MIN - 1; ++p) {
+				int prow = bg->wideBurstPending[p].row;
+				shadow[prow * 64 + streamed] = shadow[prow * 64 + inView];
+				shadow[prow * 64 + inView] = bg->wideBurstPending[p].inViewOld;
+			}
+		}
+		shadow[row * 64 + streamed] = value;
+	}
+}
+
+void GBAVideoSoftwareRendererSetWideShadow(struct GBAVideoSoftwareRenderer* renderer, bool enable) {
+	renderer->wideShadow = enable;
+	if (enable) {
+		int i;
+		for (i = 0; i < 4; ++i) {
+			_wideShadowInit(renderer, i);
+		}
+	}
+	memset(renderer->scanlineDirty, 0xFFFFFFFF, sizeof(renderer->scanlineDirty));
 }
 
 void GBAVideoSoftwareRendererSetMargin(struct GBAVideoSoftwareRenderer* renderer, int margin) {
@@ -232,6 +345,7 @@ static uint16_t GBAVideoSoftwareRendererWriteVideoRegister(struct GBAVideoRender
 		break;
 	case GBA_REG_BG0HOFS:
 		value &= 0x01FF;
+		_wideTrackScroll(&softwareRenderer->bg[0], value);
 		softwareRenderer->bg[0].x = value;
 		break;
 	case GBA_REG_BG0VOFS:
@@ -240,6 +354,7 @@ static uint16_t GBAVideoSoftwareRendererWriteVideoRegister(struct GBAVideoRender
 		break;
 	case GBA_REG_BG1HOFS:
 		value &= 0x01FF;
+		_wideTrackScroll(&softwareRenderer->bg[1], value);
 		softwareRenderer->bg[1].x = value;
 		break;
 	case GBA_REG_BG1VOFS:
@@ -248,6 +363,7 @@ static uint16_t GBAVideoSoftwareRendererWriteVideoRegister(struct GBAVideoRender
 		break;
 	case GBA_REG_BG2HOFS:
 		value &= 0x01FF;
+		_wideTrackScroll(&softwareRenderer->bg[2], value);
 		softwareRenderer->bg[2].x = value;
 		break;
 	case GBA_REG_BG2VOFS:
@@ -256,6 +372,7 @@ static uint16_t GBAVideoSoftwareRendererWriteVideoRegister(struct GBAVideoRender
 		break;
 	case GBA_REG_BG3HOFS:
 		value &= 0x01FF;
+		_wideTrackScroll(&softwareRenderer->bg[3], value);
 		softwareRenderer->bg[3].x = value;
 		break;
 	case GBA_REG_BG3VOFS:
@@ -421,6 +538,9 @@ static void GBAVideoSoftwareRendererWriteVRAM(struct GBAVideoRenderer* renderer,
 	struct GBAVideoSoftwareRenderer* softwareRenderer = (struct GBAVideoSoftwareRenderer*) renderer;
 	if (renderer->cache) {
 		mCacheSetWriteVRAM(renderer->cache, address);
+	}
+	if (softwareRenderer->wideShadow && address < 0x10000) {
+		_wideShadowWrite(softwareRenderer, address);
 	}
 	memset(softwareRenderer->scanlineDirty, 0xFFFFFFFF, sizeof(softwareRenderer->scanlineDirty));
 	softwareRenderer->bg[0].yCache = -1;
@@ -766,6 +886,13 @@ static void GBAVideoSoftwareRendererFinishFrame(struct GBAVideoRenderer* rendere
 	struct GBAVideoSoftwareRenderer* softwareRenderer = (struct GBAVideoSoftwareRenderer*) renderer;
 
 	softwareRenderer->nextY = 0;
+	int bgi;
+	for (bgi = 0; bgi < 4; ++bgi) {
+		// mgba-wide: forget the scroll direction once the camera has been still for a while
+		if (softwareRenderer->bg[bgi].wideIdle < 30 && ++softwareRenderer->bg[bgi].wideIdle == 30) {
+			softwareRenderer->bg[bgi].wideDir = 0;
+		}
+	}
 	if (softwareRenderer->temporaryBuffer) {
 		mappedMemoryFree(softwareRenderer->temporaryBuffer, GBA_VIDEO_HORIZONTAL_PIXELS * GBA_VIDEO_VERTICAL_PIXELS * 4);
 		softwareRenderer->temporaryBuffer = 0;
@@ -858,6 +985,9 @@ static void GBAVideoSoftwareRendererWriteBGCNT(struct GBAVideoSoftwareRenderer* 
 	bg->overflow = GBARegisterBGCNTGetOverflow(value);
 	bg->size = GBARegisterBGCNTGetSize(value);
 	bg->yCache = -1;
+	if (renderer->wideShadow) {
+		_wideShadowInit(renderer, bg->index);
+	}
 
 	_updateFlags(renderer, bg);
 }

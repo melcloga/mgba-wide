@@ -24,6 +24,7 @@
 #endif
 #include <mgba/internal/gba/renderers/proxy.h>
 #include <mgba/internal/gba/renderers/video-software.h>
+#include <mgba/internal/gba/wide.h>
 #include <mgba/internal/gba/savedata.h>
 #include <mgba/internal/gba/serialize.h>
 #include <mgba-util/crc32.h>
@@ -353,6 +354,22 @@ static void _GBACoreSetSync(struct mCore* core, struct mCoreSync* sync) {
 	gba->sync = sync;
 }
 
+// mgba-wide: turn the loaded game's widescreen fix on or off to match the current margin
+static void _GBACoreUpdateWide(struct mCore* core) {
+	struct GBACore* gbacore = (struct GBACore*) core;
+	struct GBA* gba = core->board;
+	bool wide = gbacore->renderer.margin > 0;
+	const struct GBAWideGame* game = NULL;
+	if (gba->memory.rom) {
+		game = GBAWideApply(gba, wide);
+	}
+	bool shadow = wide && game && game->shadowMaps;
+	gba->video.wideShadowWrites = shadow;
+	if (gbacore->renderer.wideShadow != shadow) {
+		GBAVideoSoftwareRendererSetWideShadow(&gbacore->renderer, shadow);
+	}
+}
+
 static void _GBACoreLoadConfig(struct mCore* core, const struct mCoreConfig* config) {
 	struct GBA* gba = core->board;
 	if (core->opts.mute) {
@@ -400,6 +417,7 @@ static void _GBACoreLoadConfig(struct mCore* core, const struct mCoreConfig* con
 	int margin = 0;
 	mCoreConfigGetIntValue(config, "gba.widescreenMargin", &margin);
 	GBAVideoSoftwareRendererSetMargin(&((struct GBACore*) core)->renderer, margin);
+	_GBACoreUpdateWide(core);
 }
 
 static void _GBACoreReloadConfigOption(struct mCore* core, const char* option, const struct mCoreConfig* config) {
@@ -458,6 +476,7 @@ static void _GBACoreReloadConfigOption(struct mCore* core, const char* option, c
 		int margin = 0;
 		mCoreConfigGetIntValue(config, "gba.widescreenMargin", &margin);
 		GBAVideoSoftwareRendererSetMargin(&gbacore->renderer, margin);
+		_GBACoreUpdateWide(core);
 		return;
 	}
 #ifdef BUILD_GLES3
@@ -874,6 +893,8 @@ static void _GBACoreReset(struct mCore* core) {
 	if (forceSkip) {
 		GBASkipBIOS(core->board);
 	}
+
+	_GBACoreUpdateWide(core);
 
 	mTimingInterrupt(&gba->timing);
 }

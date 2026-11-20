@@ -229,6 +229,9 @@ struct GBAVideo {
 	uint32_t frameCounter;
 	int frameskip;
 	int frameskipCounter;
+
+	// mgba-wide: report every VRAM write to the renderer (for widescreen shadow maps)
+	bool wideShadowWrites;
 };
 
 void GBAVideoInit(struct GBAVideo* video);

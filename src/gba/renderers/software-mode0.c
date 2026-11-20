@@ -8,12 +8,17 @@
 #include <mgba/internal/gba/gba.h>
 
 #define BACKGROUND_TEXT_SELECT_CHARACTER \
-	xBase = localX & 0xF8; \
-	if (background->size & 1) { \
-		xBase += (localX & 0x100) << 5; \
-	} \
-	screenBase = yBase + (xBase >> 3); \
-	LOAD_16(mapData, screenBase << 1, vram); \
+	if (wideShadowRow) { \
+		/* mgba-wide: 64-column shadow map */ \
+		mapData = wideShadowRow[(localX >> 3) & 0x3F]; \
+	} else { \
+		xBase = localX & 0xF8; \
+		if (background->size & 1) { \
+			xBase += (localX & 0x100) << 5; \
+		} \
+		screenBase = yBase + (xBase >> 3); \
+		LOAD_16(mapData, screenBase << 1, vram); \
+	}
 
 #define DRAW_BACKGROUND_MODE_0_TILE_SUFFIX_16(BLEND, OBJWIN) \
 	paletteData = GBA_TEXT_MAP_PALETTE(mapData) << 4; \
@@ -492,6 +497,11 @@ void GBAVideoSoftwareRendererDrawBackgroundMode0(struct GBAVideoSoftwareRenderer
 	}
 	int inY = y + background->y - background->offsetY;
 	uint16_t mapData;
+
+	const uint16_t* wideShadowRow = NULL;
+	if (renderer->wideShadow && renderer->margin && background->size == 0) {
+		wideShadowRow = &renderer->wideShadowMap[background->index][((inY >> 3) & 31) * 64];
+	}
 
 	unsigned yBase = inY & 0xF8;
 	if (background->size == 2) {

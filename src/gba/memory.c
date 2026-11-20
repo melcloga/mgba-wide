@@ -775,6 +775,7 @@ uint32_t GBALoad8(struct ARMCore* cpu, uint32_t address, int* cycleCounter) {
 	} \
 	wait += waitstatesRegion[GBA_REGION_PALETTE_RAM];
 
+
 #define STORE_VRAM \
 	if ((address & 0x0001FFFF) >= GBA_SIZE_VRAM) { \
 		if ((address & (GBA_SIZE_VRAM | 0x00014000)) == GBA_SIZE_VRAM && (GBARegisterDISPCNTGetMode(gba->memory.io[GBA_REG(DISPCNT)]) >= 3)) { \
@@ -791,6 +792,10 @@ uint32_t GBALoad8(struct ARMCore* cpu, uint32_t address, int* cycleCounter) {
 		LOAD_32(oldValue, address & 0x0001FFFC, gba->video.vram); \
 		if (oldValue != value) { \
 			STORE_32(value, address & 0x0001FFFC, gba->video.vram); \
+			gba->video.renderer->writeVRAM(gba->video.renderer, (address & 0x0001FFFC) + 2); \
+			gba->video.renderer->writeVRAM(gba->video.renderer, (address & 0x0001FFFC)); \
+		} else if (gba->video.wideShadowWrites) { \
+			/* mgba-wide: shadow maps need to see every map write, even unchanged ones */ \
 			gba->video.renderer->writeVRAM(gba->video.renderer, (address & 0x0001FFFC) + 2); \
 			gba->video.renderer->writeVRAM(gba->video.renderer, (address & 0x0001FFFC)); \
 		} \
@@ -821,6 +826,7 @@ uint32_t GBALoad8(struct ARMCore* cpu, uint32_t address, int* cycleCounter) {
 
 #define STORE_BAD \
 	mLOG(GBA_MEM, GAME_ERROR, "Bad memory Store32: 0x%08X", address);
+
 
 void GBAStore32(struct ARMCore* cpu, uint32_t address, int32_t value, int* cycleCounter) {
 	struct GBA* gba = (struct GBA*) cpu->master;
@@ -913,6 +919,9 @@ void GBAStore16(struct ARMCore* cpu, uint32_t address, int16_t value, int* cycle
 			LOAD_16(oldValue, address & 0x0001FFFE, gba->video.vram);
 			if (value != oldValue) {
 				STORE_16(value, address & 0x0001FFFE, gba->video.vram);
+				gba->video.renderer->writeVRAM(gba->video.renderer, address & 0x0001FFFE);
+			} else if (gba->video.wideShadowWrites) {
+				// mgba-wide: shadow maps need to see every map write, even unchanged ones
 				gba->video.renderer->writeVRAM(gba->video.renderer, address & 0x0001FFFE);
 			}
 		}

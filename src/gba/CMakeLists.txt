@@ -33,7 +33,8 @@ set(SOURCE_FILES
 	sio.c
 	sio/gbp.c
 	timer.c
-	video.c)
+	video.c
+	wide.c)
 
 set(SIO_FILES
 	sio/dolphin.c
